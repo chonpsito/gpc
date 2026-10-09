@@ -12,15 +12,37 @@
 				margin: 0px;
 				overflow: hidden;
 			}
+			#controls-help {
+				position: fixed;
+				top: 12px;
+				left: 12px;
+				padding: 10px 12px;
+				background: rgba(20, 24, 27, 0.78);
+				color: #fff;
+				font: 14px/1.45 sans-serif;
+				pointer-events: none;
+			}
+			#minimap-border {
+				position: fixed;
+				left: 15px;
+				bottom: 15px;
+				width: 180px;
+				height: 180px;
+				border: 2px solid rgba(255, 255, 255, 0.85);
+				box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+				pointer-events: none;
+			}
 		</style>
 	</head>
 	<body>
 		<!-- Contenedor del app -->
 		<div id="container"></div>
+		<div id="controls-help">W A S D — Move cat<br>Space — Jump</div>
+		<div id="minimap-border"></div>
 
 		<!-- Scripts de biblioteca -->
 		<script src="lib/three.min_r140.js"></script>
-		<script src="lib/OrbitControls.js"></script>
+		<script src="../S4/lib/GLTFLoader.js"></script>
 
 		<!-- Mi codigo -->
 		<script src="js/personal-project.js"></script>
