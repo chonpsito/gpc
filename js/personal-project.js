@@ -611,7 +611,7 @@ function actualizarDueño(delta) {
 
   // La regañina dura mientras el gato esté al alcance del objeto y el dueño lo vea
   if (gatoPuedeTirar && dueñoVeAlGato()) {
-    mensajeDueño.textContent = 'Dueño: ¡Gato, deja eso ahora mismo!';
+    mensajeDueño.textContent = 'Dueño: Michi, deja eso ahora mismo!';
     mensajeDueño.style.display = 'block';
   } else {
     mensajeDueño.style.display = 'none';
