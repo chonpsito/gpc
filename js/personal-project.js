@@ -14,6 +14,8 @@ var cayendo = false;
 var animacionSaltoActiva = false;
 var velocidadVertical = 0;
 var gravedadSalto = -220;
+var posicionSegura = new THREE.Vector3();
+var alturaLimiteCaida = -2;
 var alturaSalto = 50;
 var alturaUmbralCaida = 12;
 var inicioAnimacionSalto = 0.2 ;
@@ -645,7 +647,8 @@ function detectarSuperficieSuelo(posicion, maximoSobre) {
 }
 
 function actualizarAlturaGato(delta) {
-  var distanciaCaida = Math.max(0, -velocidadVertical * delta);
+  // Se usa la velocidad del siguiente paso para que el suelo no se salte en caídas largas
+  var distanciaCaida = Math.max(0, -(velocidadVertical + gravedadSalto * delta) * delta);
   var superficie = detectarSuperficieSuelo(
     gatoRaiz.position,
     saltando ? distanciaCaida + 0.5 : alturaEscalon
@@ -657,6 +660,7 @@ function actualizarAlturaGato(delta) {
     gatoRaiz.position.y = superficie;
     velocidadVertical = 0;
     cayendo = false;
+    posicionSegura.copy(gatoRaiz.position);
     return;
   }
 
@@ -667,6 +671,14 @@ function actualizarAlturaGato(delta) {
 
   velocidadVertical += gravedadSalto * delta;
   gatoRaiz.position.y += velocidadVertical * delta;
+  if (gatoRaiz.position.y < alturaLimiteCaida) {
+    // Red de seguridad: si atraviesa el suelo vuelve a la última posición apoyada
+    gatoRaiz.position.copy(posicionSegura);
+    velocidadVertical = 0;
+    saltando = false;
+    cayendo = false;
+    return;
+  }
   var alturaSuelo = detectarSuperficieSuelo(gatoRaiz.position, Number.MAX_VALUE);
   var alturaSobreSuelo = alturaSuelo === null
     ? gatoRaiz.position.y
