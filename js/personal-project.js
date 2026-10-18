@@ -91,6 +91,21 @@ var origenRayoDueño = new THREE.Vector3();
 var direccionRayoDueño = new THREE.Vector3();
 var rayoDueño = new THREE.Raycaster();
 
+// Pantalla de carga: el juego no empieza hasta que gato, animaciones del gato y dueño estén cargados
+var recursosPendientes = 3;
+var pantallaCarga = document.createElement('div');
+pantallaCarga.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;color:#fff;font:28px sans-serif;display:flex;align-items:center;justify-content:center;z-index:10';
+pantallaCarga.textContent = 'Cargando...';
+document.body.appendChild(pantallaCarga);
+
+function recursoCargado() {
+  recursosPendientes -= 1;
+  if (recursosPendientes === 0) {
+    pantallaCarga.style.display = 'none';
+    clock.getDelta();
+  }
+}
+
 // 1-inicializa 
 init();
 // 2-Crea una scene
@@ -166,6 +181,7 @@ function cargarModeloGato()
     scene.add(gatoRaiz);
 
     mixer = new THREE.AnimationMixer(modelo);
+    recursoCargado();
     cargarAnimacionesGato(cargador);
   }, undefined, function (error) {
     console.error('Could not load models/cat.glb. Run the page through a local web server.', error);
@@ -182,6 +198,7 @@ function cargarAnimacionesGato(cargador) {
       accionesGato[clip.name.toLowerCase()] = mixer.clipAction(clipGato);
     });
     reproducirAnimacionGato(false);
+    recursoCargado();
   }, undefined, function (error) {
     console.error('Could not load models/fox-animations.glb.', error);
   });
@@ -406,6 +423,7 @@ function cargarModeloDueño() {
     cargadorFBX.load('models/walking.fbx', function (animacionAndar) {
       accionesDueño.andar = mezcladorDueño.clipAction(buscarClipConPistas(animacionAndar.animations));
       cambiarAnimacionDueño('reposo');
+      recursoCargado();
     });
   });
 }
@@ -1331,6 +1349,9 @@ function update()
 function render()
 {
 	requestAnimationFrame( render );
+  if (recursosPendientes > 0) {
+    return;
+  }
 	update();
   var width = window.innerWidth;
   var height = window.innerHeight;
