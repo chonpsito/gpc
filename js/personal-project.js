@@ -43,7 +43,7 @@ var alturaInicioSalto = 0;
 var holguraGato = 14;
 var alturaEscalon = 4;
 var anchoPuerta = 100;
-var tamañoMinimapa = 200;
+var tamañoMinimapa = 500;
 var objetosTirables = [];
 var objetosRotos = 0;
 var distanciaTirar = 35;
@@ -58,22 +58,30 @@ var alturaFragmentos = 2;
 var radioDispersion = 14;
 var contadorTirados, avisoTirar;
 var gatoPuedeTirar = false;
+var juegoTerminado = false;
 
 // Dueño: caja que patrulla pasillo y comedor y vigila desde el pasillo si el gato está en una habitación
 var dueño, mensajeDueño;
 var estadoDueño = 'patrullando';
-var alturaDueño = 120;
+var alturaDueño = 110;
 var anchoDueño = 30;
 var velocidadDueño = 60;
-var alturaOjosDueño = 100;
+var alturaOjosDueño = 90;
 var alturaObjetivoVisionDueño = 15;
 var alcanceVisionDueño = 700;
 var anguloVisionDueño = Math.PI / 2;
 var distanciaLlegadaDueño = 5;
-var esperaReprimenda = 5;
-var duracionMensaje = 2.5;
-var tiempoReprimenda = 0;
-var tiempoMensaje = 0;
+var mezcladorDueño = null;
+var accionesDueño = {};
+var animacionActualDueño = '';
+var tiempoMezclaDueño = 0.25;
+var esperaRevision = 5;
+var tiempoRevision = 0;
+var zonaAnteriorGato = null;
+var zonaVigilada = null;
+var dueñoEsperando = false;
+var vigiladoX = 0;
+var vigiladoZ = 0;
 var indiceRutaDueño = 0;
 var rutaDueño = [[-400, 0], [0, 0], [150, 0], [150, -300], [150, 300], [150, 0]];
 var anchoPasillo = 200;
@@ -266,10 +274,16 @@ function buscarObjetoCercano() {
 }
 
 function tirarObjetoCercano() {
-  if (!gatoRaiz) {
+  if (!gatoRaiz || juegoTerminado) {
     return;
   }
   var tirable = buscarObjetoCercano();
+  if (tirable !== null && dueñoVeAlGato()) {
+    juegoTerminado = true;
+    alert('Perdiste: el dueño te ha visto tirar un objeto');
+    location.reload();
+    return;
+  }
   if (tirable === null) {
     return;
   }
@@ -380,32 +394,105 @@ function dueñoVeAlGato() {
   return true;
 }
 
-function actualizarDueño(delta) {
-  tiempoReprimenda -= delta;
-  tiempoMensaje -= delta;
-  if (tiempoMensaje <= 0) {
-    mensajeDueño.style.display = 'none';
-  }
+// Carga el modelo con la animación de reposo y la de andar, ajustado a la altura del dueño
+function cargarModeloDueño() {
+  var cargadorFBX = new THREE.FBXLoader();
+  cargadorFBX.load('models/breathing-idle.fbx', function (modeloFBX) {
+    var limites = new THREE.Box3().setFromObject(modeloFBX);
+    modeloFBX.scale.setScalar(alturaDueño / (limites.max.y - limites.min.y));
+    dueño.add(modeloFBX);
+    mezcladorDueño = new THREE.AnimationMixer(modeloFBX);
+    accionesDueño.reposo = mezcladorDueño.clipAction(buscarClipConPistas(modeloFBX.animations));
+    cargadorFBX.load('models/walking.fbx', function (animacionAndar) {
+      accionesDueño.andar = mezcladorDueño.clipAction(buscarClipConPistas(animacionAndar.animations));
+      cambiarAnimacionDueño('reposo');
+    });
+  });
+}
 
+// El FBX trae un clip vacío ("Take 001") además del clip real de Mixamo
+function buscarClipConPistas(clips) {
+  var clip = clips.find(function (clip) { return clip.tracks.length > 0; });
+  quitarMovimientoRaiz(clip);
+  return clip;
+}
+
+// Mixamo mueve la cadera hacia delante dentro del clip y al repetirse el bucle vuelve atrás;
+// se dejan fijas X y Z (el desplazamiento lo hace el código) y se conserva la altura
+function quitarMovimientoRaiz(clip) {
+  clip.tracks.forEach(function (pista) {
+    if (pista.name === 'mixamorigHips.position') {
+      for (var i = 0; i < pista.values.length; i += 3) {
+        pista.values[i] = pista.values[0];
+        pista.values[i + 2] = pista.values[2];
+      }
+    }
+  });
+}
+
+function cambiarAnimacionDueño(nombre) {
+  if (!accionesDueño[nombre] || animacionActualDueño === nombre) {
+    return;
+  }
+  var anterior = accionesDueño[animacionActualDueño];
+  var nueva = accionesDueño[nombre].reset().play();
+  if (anterior) {
+    nueva.crossFadeFrom(anterior, tiempoMezclaDueño, false);
+  }
+  animacionActualDueño = nombre;
+}
+
+function actualizarDueño(delta) {
+  var posicionPrevia = dueño.position.clone();
   var limiteComedorX = -largoCasa / 2 + largoZonaHabitaciones;
   var limiteFilasX = -largoCasa / 2 + largoZonaHabitaciones / 2;
   var mitadPasillo = anchoPasillo / 2;
   var gatoEnComedor = gatoRaiz.position.x > limiteComedorX;
   var gatoEnHabitacion = !gatoEnComedor && Math.abs(gatoRaiz.position.z) > mitadPasillo;
 
+  // Zona del gato: una por habitación (fila y lado del pasillo) y una para el comedor
+  var zonaGato = null;
+  if (gatoEnComedor) {
+    zonaGato = 'comedor';
+  } else if (gatoEnHabitacion) {
+    zonaGato = (gatoRaiz.position.x < limiteFilasX ? 'fila1' : 'fila2') + (gatoRaiz.position.z < 0 ? 'norte' : 'sur');
+  }
+
+  // Si el dueño estaba quieto vigilando y el gato cambia de zona (sale al pasillo o pasa a otra
+  // habitación por la puerta interior), se queda en su puesto esperaRevision segundos más
+  if (zonaGato !== zonaAnteriorGato && dueñoEsperando) {
+    tiempoRevision = esperaRevision;
+  }
+  if (zonaGato === zonaVigilada) {
+    tiempoRevision = 0;
+  }
+  zonaAnteriorGato = zonaGato;
+
   var destinoX;
   var destinoZ;
-  if (gatoEnHabitacion) {
+  if (tiempoRevision > 0) {
+    // Revisa que el gato no haya tirado nada: se queda en su puesto sin moverse
+    tiempoRevision -= delta;
+    estadoDueño = 'vigilando';
+    destinoX = vigiladoX;
+    destinoZ = vigiladoZ;
+  } else if (gatoEnHabitacion) {
     // Vigila entrando un poco en la habitación por la puerta de su fila (el centro de la fila)
     estadoDueño = 'vigilando';
     var xFilaInicio = gatoRaiz.position.x < limiteFilasX ? -largoCasa / 2 : limiteFilasX;
     destinoX = xFilaInicio + largoZonaHabitaciones / 4;
     destinoZ = Math.sign(gatoRaiz.position.z) * (mitadPasillo + profundidadVigilancia);
+    vigiladoX = destinoX;
+    vigiladoZ = destinoZ;
+    zonaVigilada = zonaGato;
   } else if (gatoEnComedor) {
     // El comedor se trata como una habitación: vigila desde su entrada, en el eje del pasillo
     estadoDueño = 'vigilando';
     destinoX = limiteComedorX + profundidadVigilancia;
     destinoZ = 0;
+    vigiladoX = destinoX;
+    vigiladoZ = destinoZ;
+    zonaVigilada = zonaGato;
   } else {
     if (estadoDueño === 'vigilando') {
       estadoDueño = 'patrullando';
@@ -445,6 +532,7 @@ function actualizarDueño(delta) {
     dueño.position.x += dx / distanciaPaso * avance;
     dueño.position.z += dz / distanciaPaso * avance;
     dueño.rotation.y = Math.atan2(dx, dz);
+    dueñoEsperando = false;
   } else if (pasoX !== destinoX || pasoZ !== destinoZ) {
     // Waypoint alcanzado: se ajusta a él para que el siguiente tramo sea recto
     dueño.position.x = pasoX;
@@ -452,14 +540,19 @@ function actualizarDueño(delta) {
   } else if (estadoDueño === 'patrullando') {
     indiceRutaDueño = (indiceRutaDueño + 1) % rutaDueño.length;
   } else {
+    // Llegó a su puesto de vigilancia y se queda quieto mirando al gato
+    dueñoEsperando = true;
     dueño.rotation.y = Math.atan2(gatoRaiz.position.x - dueño.position.x, gatoRaiz.position.z - dueño.position.z);
   }
 
-  if (gatoPuedeTirar && tiempoReprimenda <= 0 && dueñoVeAlGato()) {
+  cambiarAnimacionDueño(dueño.position.distanceToSquared(posicionPrevia) > 0.0001 ? 'andar' : 'reposo');
+
+  // La regañina dura mientras el gato esté al alcance del objeto y el dueño lo vea
+  if (gatoPuedeTirar && dueñoVeAlGato()) {
     mensajeDueño.textContent = 'Dueño: ¡Gato, deja eso ahora mismo!';
     mensajeDueño.style.display = 'block';
-    tiempoMensaje = duracionMensaje;
-    tiempoReprimenda = esperaReprimenda;
+  } else {
+    mensajeDueño.style.display = 'none';
   }
 }
 
@@ -1178,12 +1271,10 @@ function loadScene() {
     }
 
     // Dueño: una caja que empieza en la entrada del pasillo
-    dueño = new THREE.Mesh(
-      new THREE.BoxGeometry(anchoDueño, alturaDueño, anchoDueño),
-      new THREE.MeshBasicMaterial({ color: 0xcc8833 })
-    );
-    dueño.position.set(rutaDueño[0][0], alturaDueño / 2, rutaDueño[0][1]);
+    dueño = new THREE.Group();
+    dueño.position.set(rutaDueño[0][0], 0, rutaDueño[0][1]);
     scene.add(dueño);
+    cargarModeloDueño();
 
     // Interfaz: contador y aviso de tirar
     contadorTirados = document.createElement('div');
@@ -1227,6 +1318,9 @@ function update()
 {
   var delta = Math.min(clock.getDelta(), 0.05);
   moverGato(delta);
+  if (mezcladorDueño) {
+    mezcladorDueño.update(delta);
+  }
   if (mixer) {
     mixer.update(delta);
   }
