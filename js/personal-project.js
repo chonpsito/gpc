@@ -26,6 +26,18 @@ var camaraLibre = new THREE.Vector3();
 var distanciaCamaraActual = null;
 var angulo = 0;
 var velocidadGiro = 2.5;
+// Aspecto visual: iluminación y ambiente
+var colorCielo = 0x9fc5e8;
+var colorLuzCielo = 0xfff4e0;
+var colorLuzSuelo = 0x6b5b4b;
+var intensidadLuzAmbiente = 0.45;
+var colorLuzSol = 0xfff1d6;
+var intensidadLuzSol = 0.55;
+var posicionLuzSol = { x: 150, y: 900, z: 100 };
+var resolucionSombras = 2048;
+var sesgoSombras = -0.0005;
+var exposicionRenderer = 0.8;
+
 var largoCasa = 1000;
 var anchoCasa = 1200;
 var altoExterior = 300;
@@ -118,7 +130,12 @@ function init()
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize( window.innerWidth, window.innerHeight );
-  renderer.setClearColor( new THREE.Color(0x000000) );
+  renderer.setClearColor( new THREE.Color(colorCielo) );
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = exposicionRenderer;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.getElementById('container').appendChild( renderer.domElement );
 
   scene = new THREE.Scene();
@@ -132,9 +149,18 @@ function init()
   camaraMapa.position.set(0, 600, 0);
   camaraMapa.lookAt(0, 0, 0);
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x777777, 0.8));
-  var light = new THREE.DirectionalLight(0xffffff, 0.7);
-  light.position.set(100, 200, 100);
+  scene.add(new THREE.HemisphereLight(colorLuzCielo, colorLuzSuelo, intensidadLuzAmbiente));
+  var light = new THREE.DirectionalLight(colorLuzSol, intensidadLuzSol);
+  light.position.set(posicionLuzSol.x, posicionLuzSol.y, posicionLuzSol.z);
+  light.castShadow = true;
+  light.shadow.mapSize.set(resolucionSombras, resolucionSombras);
+  light.shadow.camera.left = -largoCasa / 2;
+  light.shadow.camera.right = largoCasa / 2;
+  light.shadow.camera.top = anchoCasa / 2;
+  light.shadow.camera.bottom = -anchoCasa / 2;
+  light.shadow.camera.near = 1;
+  light.shadow.camera.far = 1200;
+  light.shadow.bias = sesgoSombras;
   scene.add(light);
 
   window.addEventListener('resize', updateAspectRatio );
@@ -417,6 +443,11 @@ function cargarModeloDueño() {
   cargadorFBX.load('models/breathing-idle.fbx', function (modeloFBX) {
     var limites = new THREE.Box3().setFromObject(modeloFBX);
     modeloFBX.scale.setScalar(alturaDueño / (limites.max.y - limites.min.y));
+    modeloFBX.traverse(function (parte) {
+      if (parte.isMesh) {
+        parte.castShadow = true;
+      }
+    });
     dueño.add(modeloFBX);
     mezcladorDueño = new THREE.AnimationMixer(modeloFBX);
     accionesDueño.reposo = mezcladorDueño.clipAction(buscarClipConPistas(modeloFBX.animations));
@@ -809,13 +840,16 @@ function loadScene() {
 
     // Largo pared
     function crearPared(largo, alto, rotada, color = 0xeeeeee) {
-      const materialPared = new THREE.MeshBasicMaterial({ color: color});
+      const rugosidadPared = 0.9;
+      const materialPared = new THREE.MeshStandardMaterial({ color: color, roughness: rugosidadPared, metalness: 0 });
       const grosorPared = 5;
       var pared = new THREE.Mesh(
         new THREE.BoxGeometry(largo, alto, grosorPared),
         materialPared
       );
       pared.position.y = alto/2;
+      pared.castShadow = true;
+      pared.receiveShadow = true;
       if (rotada) {
         pared.rotation.y = Math.PI / 2;
       }
@@ -831,7 +865,7 @@ function loadScene() {
     paredExteriorDer.position.z = anchoCasa / 2;
     casa.add(paredExteriorDer)
 
-    let paredExteriorAb = crearPared(anchoCasa, altoExterior, true, 0x0000ff);
+    let paredExteriorAb = crearPared(anchoCasa, altoExterior, true, 0x4a6fb5);
     paredExteriorAb.position.x = largoCasa / 2;
     casa.add(paredExteriorAb);
 
@@ -856,7 +890,7 @@ function loadScene() {
     // entrada, baño-pasillo, habitación-pasillo, baño-habitación,
     // cocina-pasillo, despacho-pasillo, cocina-despacho
     let paredesConPuerta = [
-      [anchoCasa, true, - largoCasa / 2, 0, 0xff0000],
+      [anchoCasa, true, - largoCasa / 2, 0, 0xc0504d],
       [largoBaño, false, - largoCasa / 2 + largoBaño / 2, - anchoCasa / 2 + anchoBaño, 0xeeeeee],
       [largoHab, false, - largoCasa / 2 + largoBaño + largoHab / 2, - anchoCasa / 2 + anchoHab, 0xeeeeee],
       [anchoBaño, true, - largoCasa / 2 + largoBaño, - anchoCasa / 2 + anchoBaño / 2, 0xeeeeee],
@@ -882,12 +916,21 @@ function loadScene() {
     // Comedor: última fila sin paredes interiores, conectado al pasillo
     
     // Decoración básica: cada objeto define sus medidas antes de crearse y lo reutilizable se clona
-    let materialMadera = new THREE.MeshBasicMaterial({ color: 0x8b5a2b });
-    let materialTela = new THREE.MeshBasicMaterial({ color: 0x4466aa });
-    let materialBlanco = new THREE.MeshBasicMaterial({ color: 0xf2f2f2 });
-    let materialEncimera = new THREE.MeshBasicMaterial({ color: 0x555566 });
-    let materialMueble = new THREE.MeshBasicMaterial({ color: 0xaa7744 });
-    let materialPantalla = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    let cargadorTexturas = new THREE.TextureLoader().setPath('images/');
+    let texturaMadera = cargadorTexturas.load('wood512.jpg');
+    texturaMadera.encoding = THREE.sRGBEncoding;
+    texturaMadera.wrapS = texturaMadera.wrapT = THREE.RepeatWrapping;
+    let texturaMetal = cargadorTexturas.load('pisometalico_1024.jpg');
+    texturaMetal.encoding = THREE.sRGBEncoding;
+    texturaMetal.wrapS = texturaMetal.wrapT = THREE.RepeatWrapping;
+    texturaMetal.repeat.set(2, 1);
+
+    let materialMadera = new THREE.MeshStandardMaterial({ map: texturaMadera, color: 0xb0804f, roughness: 0.75, metalness: 0 });
+    let materialTela = new THREE.MeshStandardMaterial({ color: 0x4466aa, roughness: 1, metalness: 0 });
+    let materialBlanco = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.35, metalness: 0.1 });
+    let materialEncimera = new THREE.MeshStandardMaterial({ color: 0x8888a0, roughness: 0.3, metalness: 0.25 });
+    let materialMueble = new THREE.MeshStandardMaterial({ map: texturaMadera, color: 0xd9a66b, roughness: 0.6, metalness: 0 });
+    let materialPantalla = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.1, metalness: 0.6 });
 
     // Esquinas de las zonas de la casa (el eje x es el largo y el z el ancho)
     let xBaño = - largoCasa / 2;
@@ -1185,14 +1228,14 @@ function loadScene() {
     let largoLibro = 11;
     let colorLibro = 0xaa3333;
     let libro = new THREE.Object3D();
-    libro.add(new THREE.Mesh(new THREE.BoxGeometry(anchoLibro, alturaLibro, largoLibro), new THREE.MeshBasicMaterial({ color: colorLibro })));
+    libro.add(new THREE.Mesh(new THREE.BoxGeometry(anchoLibro, alturaLibro, largoLibro), new THREE.MeshStandardMaterial({ color: colorLibro, roughness: 0.8, metalness: 0 })));
     libro.children[0].position.y = alturaLibro / 2;
 
     let radioTaza = 4;
     let alturaTaza = 8;
     let radioAsaTaza = 1.5;
     let colorTaza = 0xffffff;
-    let materialTaza = new THREE.MeshBasicMaterial({ color: colorTaza });
+    let materialTaza = new THREE.MeshStandardMaterial({ color: colorTaza, roughness: 0.2, metalness: 0.05 });
     let taza = new THREE.Object3D();
     let cuerpoTaza = new THREE.Mesh(new THREE.CylinderGeometry(radioTaza, radioTaza, alturaTaza), materialTaza);
     cuerpoTaza.position.y = alturaTaza / 2;
@@ -1206,7 +1249,7 @@ function loadScene() {
     let radioCuelloBotella = 1.2;
     let alturaCuelloBotella = 5;
     let colorBotella = 0x2e8b57;
-    let materialBotella = new THREE.MeshBasicMaterial({ color: colorBotella });
+    let materialBotella = new THREE.MeshStandardMaterial({ color: colorBotella, roughness: 0.1, metalness: 0.1 });
     let botella = new THREE.Object3D();
     let cuerpoBotella = new THREE.Mesh(new THREE.CylinderGeometry(radioBotella, radioBotella, alturaCuerpoBotella), materialBotella);
     cuerpoBotella.position.y = alturaCuerpoBotella / 2;
@@ -1221,10 +1264,10 @@ function loadScene() {
     let alturaLlama = 4;
     let colorVela = 0xf5e6b3;
     let vela = new THREE.Object3D();
-    let cuerpoVela = new THREE.Mesh(new THREE.CylinderGeometry(radioVela, radioVela, alturaVela), new THREE.MeshBasicMaterial({ color: colorVela }));
+    let cuerpoVela = new THREE.Mesh(new THREE.CylinderGeometry(radioVela, radioVela, alturaVela), new THREE.MeshStandardMaterial({ color: colorVela, roughness: 0.9, metalness: 0 }));
     cuerpoVela.position.y = alturaVela / 2;
     vela.add(cuerpoVela);
-    let llamaVela = new THREE.Mesh(new THREE.ConeGeometry(radioLlama, alturaLlama), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+    let llamaVela = new THREE.Mesh(new THREE.ConeGeometry(radioLlama, alturaLlama), new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff8800, emissiveIntensity: 0.8, roughness: 1, metalness: 0 }));
     llamaVela.position.y = alturaVela + alturaLlama / 2;
     vela.add(llamaVela);
 
@@ -1233,8 +1276,61 @@ function loadScene() {
     let alturaJarron = 18;
     let colorJarron = 0x3366cc;
     let jarron = new THREE.Object3D();
-    jarron.add(new THREE.Mesh(new THREE.CylinderGeometry(radioSuperiorJarron, radioInferiorJarron, alturaJarron), new THREE.MeshBasicMaterial({ color: colorJarron })));
+    jarron.add(new THREE.Mesh(new THREE.CylinderGeometry(radioSuperiorJarron, radioInferiorJarron, alturaJarron), new THREE.MeshStandardMaterial({ color: colorJarron, roughness: 0.25, metalness: 0.1 })));
     jarron.children[0].position.y = alturaJarron / 2;
+
+    // Lámpara de mesa: base, pie, pantalla y luz puntual; se clona en cada mesa donde se use
+    let radioBaseLampara = 6;
+    let alturaBaseLampara = 2;
+    let radioPieLampara = 1;
+    let alturaPieLampara = 22;
+    let radioInferiorPantallaLampara = 9;
+    let radioSuperiorPantallaLampara = 5;
+    let alturaPantallaLampara = 12;
+    let colorLuzLampara = 0xffd9a0;
+    let intensidadLuzLampara = 0.9;
+    let distanciaLuzLampara = 350;
+    let materialMetalLampara = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.4, metalness: 0.6 });
+    let materialPantallaLampara = new THREE.MeshStandardMaterial({ color: 0xfff0cc, emissive: 0xffc870, emissiveIntensity: 0.9, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+    let lampara = new THREE.Object3D();
+    let baseLampara = new THREE.Mesh(new THREE.CylinderGeometry(radioBaseLampara, radioBaseLampara, alturaBaseLampara), materialMetalLampara);
+    baseLampara.position.y = alturaBaseLampara / 2;
+    lampara.add(baseLampara);
+    let pieLampara = new THREE.Mesh(new THREE.CylinderGeometry(radioPieLampara, radioPieLampara, alturaPieLampara), materialMetalLampara);
+    pieLampara.position.y = alturaBaseLampara + alturaPieLampara / 2;
+    lampara.add(pieLampara);
+    let pantallaLampara = new THREE.Mesh(new THREE.CylinderGeometry(radioSuperiorPantallaLampara, radioInferiorPantallaLampara, alturaPantallaLampara, 16, 1, true), materialPantallaLampara);
+    pantallaLampara.position.y = alturaBaseLampara + alturaPieLampara + alturaPantallaLampara / 2 - 4;
+    lampara.add(pantallaLampara);
+    let luzLampara = new THREE.PointLight(colorLuzLampara, intensidadLuzLampara, distanciaLuzLampara, 2);
+    luzLampara.position.y = pantallaLampara.position.y;
+    lampara.add(luzLampara);
+
+    // Lámparas sobre escritorio, mesilla, aparador y encimera (apartadas de los objetos tirables)
+    let margenLampara = 15;
+    let lamparasMesa = [
+      [escritorio.position.x + anchoEscritorio / 2 - margenLampara, alturaEscritorio, escritorio.position.z],
+      [mesilla.position.x, alturaMesilla, mesilla.position.z - 8],
+      [aparador.position.x, alturaAparador, aparador.position.z + largoAparador / 2 - margenLampara],
+      [encimeraFondo.position.x + anchoEncimeraFondo / 2 - margenLampara, alturaEncimera, encimeraFondo.position.z]
+    ];
+    for (let i = 0; i < lamparasMesa.length; i++) {
+      let lamparaClon = lampara.clone();
+      lamparaClon.position.set(lamparasMesa[i][0], lamparasMesa[i][1], lamparasMesa[i][2]);
+      casa.add(lamparaClon);
+    }
+
+    // Bombilla de techo del pasillo (sin sombras para no gastar rendimiento)
+    let radioBombilla = 6;
+    let alturaBombilla = altoInterior - radioBombilla - 4;
+    let intensidadBombilla = 0.8;
+    let distanciaBombilla = 450;
+    let bombillaPasillo = new THREE.Mesh(new THREE.SphereGeometry(radioBombilla, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff0cc }));
+    bombillaPasillo.position.set(xComedor - 250, alturaBombilla, 0);
+    casa.add(bombillaPasillo);
+    let luzPasillo = new THREE.PointLight(colorLuzLampara, intensidadBombilla, distanciaBombilla, 2);
+    luzPasillo.position.copy(bombillaPasillo.position);
+    casa.add(luzPasillo);
 
     // Cada objeto se coloca en el borde de una superficie con su centro justo sobre el filo
     // y se empuja hacia fuera en la dirección libre del borde (dirX, dirZ)
@@ -1274,6 +1370,11 @@ function loadScene() {
       let punto = puntosTirables[i];
       let objetoTirable = punto[0].clone();
       objetoTirable.position.set(punto[2], punto[3], punto[4]);
+      objetoTirable.traverse(function (parte) {
+        if (parte.isMesh) {
+          parte.castShadow = true;
+        }
+      });
       scene.add(objetoTirable);
       objetosTirables.push({
         objeto: objetoTirable,
@@ -1307,14 +1408,27 @@ function loadScene() {
     document.body.appendChild(mensajeDueño);
     contadorTirados.textContent = 'Objetos tirados: 0/' + objetosTirables.length;
 
+    casa.traverse(function (parte) {
+      if (parte.isMesh) {
+        parte.castShadow = true;
+        parte.receiveShadow = true;
+      }
+    });
     scene.add(casa);
     casa.updateMatrixWorld(true);
     objetosColision.push(casa);
     // Añadir suelo 
-    let materialSuelo = new THREE.MeshBasicMaterial({ color: 0x999999 });
+    let repeticionesSueloX = 4;
+    let repeticionesSueloZ = 6;
+    let texturaSuelo = texturaMadera.clone();
+    texturaSuelo.wrapS = texturaSuelo.wrapT = THREE.MirroredRepeatWrapping;
+    texturaSuelo.needsUpdate = true;
+    texturaSuelo.repeat.set(repeticionesSueloX, repeticionesSueloZ);
+    let materialSuelo = new THREE.MeshStandardMaterial({ map: texturaSuelo, color: 0xa08868, roughness: 0.8, metalness: 0 });
     let geometriaSuelo = new THREE.PlaneGeometry(largoCasa, anchoCasa);
     let suelo = new THREE.Mesh(geometriaSuelo, materialSuelo);
     suelo.rotateOnAxis(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+    suelo.receiveShadow = true;
     scene.add(suelo);
     superficiesCaminables.push(suelo);
 
