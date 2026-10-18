@@ -428,12 +428,12 @@ function update()
   if (animationActive) {
     animationSpeed = Math.min(animationSpeed + animation_acceleration * delta, animation_max_speed);
     animationTime += animationSpeed * delta;
-    baseRotation = Math.sin(animationTime * 0.7) * 180;
-    armRotation = Math.sin(animationTime) * 30;
-    forearmRotationY = Math.sin(animationTime * 1.2) * 90;
-    forearmRotationZ = Math.sin(animationTime * 0.8) * 45;
-    gripperRotation = 90 + Math.sin(animationTime * 1.4) * 90;
-    separation = Math.abs(Math.sin(animationTime * 1.4) * 10);
+    baseRotation += Math.sin(animationTime * 0.7) * 180;
+    armRotation += Math.sin(animationTime) * 30;
+    forearmRotationY += Math.sin(animationTime * 1.2) * 90;
+    forearmRotationZ += Math.sin(animationTime * 0.8) * 45;
+    gripperRotation += Math.sin(animationTime * 1.4) * 90;
+    separation += Math.abs(Math.sin(animationTime * 1.4) * 10);
   } else {
     animationTime = 0;
     animationSpeed = 0;
