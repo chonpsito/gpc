@@ -9,13 +9,14 @@ var accionActualGato = null;
 var teclasPulsadas = {};
 var velocidadGato = 90;
 var multiplicadorCarrera = 1.8;
+var multiplicadorSigilo = 0.5;
 var saltando = false;
 var cayendo = false;
 var animacionSaltoActiva = false;
 var velocidadVertical = 0;
 var gravedadSalto = -220;
 var posicionSegura = new THREE.Vector3();
-var alturaLimiteCaida = -2;
+var alturaLimiteCaida = -15;
 var alturaSalto = 50;
 var alturaUmbralCaida = 12;
 var inicioAnimacionSalto = 0.2 ;
@@ -270,7 +271,9 @@ function moverGato(delta) {
   if (direccion !== 0) {
     direccionMovimiento.set(-Math.sin(angulo) * direccion, 0, -Math.cos(angulo) * direccion);
     var corriendo = teclasPulsadas.ShiftLeft || teclasPulsadas.ShiftRight;
-    var distanciaPaso = velocidadGato * (corriendo ? multiplicadorCarrera : 1) * delta;
+    var agachadoMovimiento = teclasPulsadas.ControlLeft || teclasPulsadas.ControlRight;
+    var multiplicadorVelocidad = agachadoMovimiento ? multiplicadorSigilo : (corriendo ? multiplicadorCarrera : 1);
+    var distanciaPaso = velocidadGato * multiplicadorVelocidad * delta;
     if (gatoPuedeMoverse(distanciaPaso)) {
       gatoRaiz.position.addScaledVector(direccionMovimiento, distanciaPaso);
     } else {
