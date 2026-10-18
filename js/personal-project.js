@@ -71,6 +71,7 @@ var radioDispersion = 14;
 var contadorTirados, avisoTirar;
 var gatoPuedeTirar = false;
 var juegoTerminado = false;
+var retardoVictoria = 2500;
 
 // Dueño: caja que patrulla pasillo y comedor y vigila desde el pasillo si el gato está en una habitación
 var dueño, mensajeDueño;
@@ -87,7 +88,7 @@ var mezcladorDueño = null;
 var accionesDueño = {};
 var animacionActualDueño = '';
 var tiempoMezclaDueño = 0.25;
-var esperaRevision = 5;
+var esperaRevision = 8;
 var tiempoRevision = 0;
 var zonaAnteriorGato = null;
 var zonaVigilada = null;
@@ -358,6 +359,13 @@ function romperObjeto(tirable, alturaSuelo) {
   tirable.estado = 'roto';
   objetosRotos += 1;
   contadorTirados.textContent = 'Objetos tirados: ' + objetosRotos + '/' + objetosTirables.length;
+  if (objetosRotos === objetosTirables.length && !juegoTerminado) {
+    juegoTerminado = true;
+    setTimeout(function () {
+      alert('¡Victoria! Has tirado todos los objetos');
+      location.reload();
+    }, retardoVictoria);
+  }
 }
 
 function actualizarObjetosTirables(delta) {
