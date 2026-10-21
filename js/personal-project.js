@@ -859,7 +859,6 @@ function actualizarCamaraTerceraPersona(delta) {
 
 function loadScene() {
     cargarModeloGato();
-    scene.add(new THREE.AxesHelper(200));
 
     // Largo pared
     function crearPared(largo, alto, rotada, color = 0xeeeeee) {
